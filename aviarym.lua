@@ -11,8 +11,23 @@ local screen = {}
 local engine = {}
 local sample_path = "/home/we/dust/audio/aviarym/samples/"
 
+-- Helper function to check if directory exists
+local function directory_exists(path)
+  local ok, err, code = os.rename(path, path)
+  if not ok and code == 13 then
+    return true
+  end
+  return ok
+end
+
 -- Initialize the script
 function init()
+  -- Check and create samples directory if it doesn't exist
+  if not directory_exists(sample_path) then
+    print("Creating samples directory at: " .. sample_path)
+    os.execute("mkdir -p " .. sample_path)
+  end
+  
   -- Initialize parameters
   params:add_separator("AVIARYM")
   params:add{type = "file", id = "sample", name = "Sample", path = sample_path}
@@ -39,9 +54,6 @@ function init()
   -- Initialize engine
   engine.name = "Aviarym"
   engine.reload()
-  
-  -- Create samples directory if it doesn't exist
-  os.execute("mkdir -p " .. sample_path)
   
   -- Start the script
   redraw()

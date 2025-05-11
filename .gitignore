@@ -1,0 +1,32 @@
+# Audio files
+*.mp3
+*.wav
+*.aif
+*.aiff
+*.ogg
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Data directory (contains user-specific data)
+data/
+
+# Temporary files
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.so
+*.dylib
+*.dll
+
+# Environment variables
+.env
+.env.* 
