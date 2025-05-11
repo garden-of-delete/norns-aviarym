@@ -7,26 +7,69 @@
 
 local Setup = dofile('/home/we/dust/code/aviarym/setup.lua')
 
--- Function to find first MP3 file in directory
-function find_first_mp3()
-  local dir = "/home/we/dust/audio/aviarym/samples"
-  local files = io.popen("ls " .. dir .. "/*.wav 2>/dev/null")
-  if files then
-    local first_file = files:read("*l")
-    files:close()
-    return first_file
+-- Function to read metadata file
+local function read_metadata()
+  local file = io.open("/home/we/dust/data/aviarym/samples.json", "r")
+  if not file then
+    print("Error: Could not open metadata file")
+    return nil
   end
-  return nil
+  
+  local content = file:read("*all")
+  file:close()
+  
+  -- Simple JSON parsing for our specific format
+  local samples = {}
+  for line in content:gmatch('"([^"]+)"') do
+    if line:match("%.wav$") then  -- Only include WAV files
+      table.insert(samples, line)
+    end
+  end
+  
+  if #samples == 0 then
+    print("No samples found in metadata file")
+    return nil
+  end
+  
+  return samples
+end
+
+-- Function to choose random sample
+local function choose_random_sample(samples)
+  if not samples or #samples == 0 then
+    return nil
+  end
+  return samples[math.random(1, #samples)]
 end
 
 function init()
   Setup.init()
   
+  -- Debug print Setup table values
+  print("Setup table values:")
+  for key, value in pairs(Setup) do
+    print(string.format("  %s: %s", key, tostring(value)))
+    if type(value) == "boolean" and not value then
+      print("ERROR: Setup failed - " .. key .. " is false")
+      return
+    end
+  end
+  
+  -- Initialize random seed
+  math.randomseed(os.time())
+  
+  -- Read metadata and get available samples
+  local samples = read_metadata()
+  if not samples then
+    print("No samples available")
+    return
+  end
+  
   -- Initialize Softcut parameters
   softcut.buffer_clear()
   
-  -- Find and load first MP3
-  local sample_file = find_first_mp3()
+  -- Choose initial sample
+  local sample_file = choose_random_sample(samples)
   if sample_file then
     print("Loading sample: " .. sample_file)
     -- Read file into buffer 1
@@ -56,11 +99,26 @@ function init()
   position = 0
   volume = 1.0
   is_playing = false
+  current_samples = samples -- Store samples list for later use
   redraw()
 end
 
 function key(n,z)
   if n == 2 and z == 1 then
+    if not is_playing then
+      -- Choose new random sample when starting playback
+      local sample_file = choose_random_sample(current_samples)
+      if sample_file then
+        print("Loading new sample: " .. sample_file)
+        softcut.buffer_clear()
+        softcut.buffer_read_mono(sample_file, 0, 1, -1, 1, 1)
+        local ch, samples, samplerate = audio.file_info(sample_file)
+        local duration = samples / samplerate
+        softcut.loop_start(1, 0)
+        softcut.loop_end(1, duration)
+        softcut.position(1, 0)
+      end
+    end
     is_playing = not is_playing
     softcut.play(1, is_playing and 1 or 0)
   end
