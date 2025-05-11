@@ -5,6 +5,8 @@
 -- ENC 2 change sample position
 -- ENC 3 change volume
 
+local Setup = dofile('/home/we/dust/code/aviarym/setup.lua')
+
 -- Function to find first MP3 file in directory
 function find_first_mp3()
   local dir = "/home/we/dust/audio/aviarym/samples"
@@ -18,6 +20,8 @@ function find_first_mp3()
 end
 
 function init()
+  Setup.init()
+  
   -- Initialize Softcut parameters
   softcut.buffer_clear()
   
