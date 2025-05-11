@@ -8,7 +8,7 @@
 -- Function to find first MP3 file in directory
 function find_first_mp3()
   local dir = "/home/we/dust/audio/aviarym/samples"
-  local files = io.popen("ls " .. dir .. "/*.mp3 2>/dev/null")
+  local files = io.popen("ls " .. dir .. "/*.wav 2>/dev/null")
   if files then
     local first_file = files:read("*l")
     files:close()
@@ -36,10 +36,10 @@ function init()
     softcut.level(1, 1.0)
     -- Enable loop
     softcut.loop(1, 1)
-    -- Set loop points
+    local ch, samples, samplerate = audio.file_info(sample_file)
+    local duration = samples / samplerate
     softcut.loop_start(1, 0)
-    softcut.loop_end(1, 1)
-    -- Set initial position
+    softcut.loop_end(1, duration)
     softcut.position(1, 0)
     -- Set playback rate
     softcut.rate(1, 1.0)
