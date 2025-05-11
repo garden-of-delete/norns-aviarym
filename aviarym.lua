@@ -1,8 +1,7 @@
 -- aviarym
 -- minimal sample player
 --
--- KEY 2 toggle playback for voice 1
--- KEY 3 toggle playback for voice 2
+-- KEY 2 toggle both voices simultaneously
 -- ENC 2 change sample position for voice 1
 -- ENC 3 change sample position for voice 2
 -- ENC 1 change volume for both voices
@@ -93,7 +92,18 @@ function init()
     current_position = current_position + duration
   end
   
-  print("Loaded " .. #sample_positions .. " samples into buffer")
+  print("\n=== SAMPLE BUFFER INFORMATION ===")
+  print("Total samples loaded: " .. #sample_positions)
+  print("Total buffer duration: " .. string.format("%.2f", current_position) .. " seconds")
+  print("\nDetailed sample information:")
+  for i, sample in ipairs(sample_positions) do
+    print(string.format("\nSample %d:", i))
+    print("  File: " .. sample.file)
+    print("  Start position: " .. string.format("%.2f", sample.start) .. " seconds")
+    print("  End position: " .. string.format("%.2f", sample.end_pos) .. " seconds")
+    print("  Duration: " .. string.format("%.2f", sample.end_pos - sample.start) .. " seconds")
+  end
+  print("\n===============================")
   
   -- Set up voice 1
   softcut.enable(1, 1)
@@ -102,7 +112,7 @@ function init()
   softcut.level_input_cut(1, 1, 1.0)
   softcut.level_input_cut(2, 1, 1.0)
   softcut.level_cut_cut(1, 1, 1.0)  -- Voice 1 to output (self-routing)
-  softcut.pan(1, 0.0)
+  softcut.pan(1, -0.5)  -- Pan slightly left
   softcut.loop(1, 1)
   current_sample1 = choose_random_sample_index()
   local sample1_pos = sample_positions[current_sample1]
@@ -120,7 +130,7 @@ function init()
   softcut.level_input_cut(1, 2, 1.0)
   softcut.level_input_cut(2, 2, 1.0)
   softcut.level_cut_cut(2, 2, 1.0)  -- Voice 2 to output (self-routing)
-  softcut.pan(2, 0.0)
+  softcut.pan(2, 0.5)  -- Pan slightly right
   softcut.loop(2, 1)
   current_sample2 = choose_random_sample_index()
   local sample2_pos = sample_positions[current_sample2]
@@ -139,8 +149,7 @@ function init()
   position1 = 0
   position2 = 0
   volume = 1.0
-  is_playing1 = false
-  is_playing2 = false
+  is_playing = false
   current_samples = samples
   redraw()
 end
@@ -148,33 +157,35 @@ end
 function key(n,z)
   print("Key pressed: " .. n .. " state: " .. z)
   if n == 2 and z == 1 then
-    print("K2 pressed - toggling voice 1")
-    is_playing1 = not is_playing1
-    if is_playing1 then
-      -- Choose new random sample when starting playback
+    print("K2 pressed - toggling both voices")
+    is_playing = not is_playing
+    
+    if is_playing then
+      -- Choose new random samples for both voices
       current_sample1 = choose_random_sample_index()
-      local sample_pos = sample_positions[current_sample1]
-      print("Voice 1 playing sample: " .. sample_pos.file)
-      softcut.loop_start(1, sample_pos.start)
-      softcut.loop_end(1, sample_pos.end_pos)
-      softcut.position(1, sample_pos.start)
-    end
-    softcut.play(1, is_playing1 and 1 or 0)
-    print("Voice 1 play state: " .. (is_playing1 and "ON" or "OFF"))
-  elseif n == 3 and z == 1 then
-    print("K3 pressed - toggling voice 2")
-    is_playing2 = not is_playing2
-    if is_playing2 then
-      -- Choose new random sample when starting playback
       current_sample2 = choose_random_sample_index()
-      local sample_pos = sample_positions[current_sample2]
-      print("Voice 2 playing sample: " .. sample_pos.file)
-      softcut.loop_start(2, sample_pos.start)
-      softcut.loop_end(2, sample_pos.end_pos)
-      softcut.position(2, sample_pos.start)
+      
+      local sample1_pos = sample_positions[current_sample1]
+      local sample2_pos = sample_positions[current_sample2]
+      
+      print("Voice 1 playing sample: " .. sample1_pos.file)
+      print("Voice 2 playing sample: " .. sample2_pos.file)
+      
+      -- Set up voice 1
+      softcut.loop_start(1, sample1_pos.start)
+      softcut.loop_end(1, sample1_pos.end_pos)
+      softcut.position(1, sample1_pos.start)
+      
+      -- Set up voice 2
+      softcut.loop_start(2, sample2_pos.start)
+      softcut.loop_end(2, sample2_pos.end_pos)
+      softcut.position(2, sample2_pos.start)
     end
-    softcut.play(2, is_playing2 and 1 or 0)
-    print("Voice 2 play state: " .. (is_playing2 and "ON" or "OFF"))
+    
+    -- Toggle both voices
+    softcut.play(1, is_playing and 1 or 0)
+    softcut.play(2, is_playing and 1 or 0)
+    print("Play state: " .. (is_playing and "ON" or "OFF"))
   end
   redraw()
 end
@@ -211,16 +222,14 @@ function redraw()
   screen.move(10, 30)
   screen.text("POS: " .. string.format("%.2f", position1))
   screen.move(10, 40)
-  screen.text("PLAY: " .. (is_playing1 and "ON" or "OFF"))
-  screen.move(10, 50)
   screen.text("VOICE 2:")
-  screen.move(10, 60)
+  screen.move(10, 50)
   screen.text("POS: " .. string.format("%.2f", position2))
-  screen.move(10, 70)
-  screen.text("PLAY: " .. (is_playing2 and "ON" or "OFF"))
-  screen.move(10, 80)
+  screen.move(10, 60)
   screen.text("VOL: " .. string.format("%.2f", volume))
-  screen.move(10, 90)
-  screen.text("K2/K3: toggle voices")
+  screen.move(10, 70)
+  screen.text("PLAY: " .. (is_playing and "ON" or "OFF"))
+  screen.move(10, 80)
+  screen.text("K2: toggle both voices")
   screen.update()
 end
