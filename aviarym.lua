@@ -8,9 +8,35 @@
 -- ENC 3 change sample position for selected voice
 
 local Setup = dofile('/home/we/dust/code/aviarym/setup.lua')
-local cartographer = include('lib/cartographer/cartographer')
-print("Cartographer loaded successfully!")
--- TODO: 
+
+-- Try to load cartographer with error handling
+local cartographer = nil
+local cartographer_available = false
+
+local function load_cartographer()
+  local success, result = pcall(function()
+    return include('lib/cartographer/cartographer')
+  end)
+  
+  if success and result then
+    cartographer = result
+    cartographer_available = true
+    print("Cartographer loaded successfully!")
+    return true
+  else
+    print("Error loading cartographer: " .. tostring(result))
+    print("Please ensure cartographer is installed in /home/we/dust/code/lib/cartographer/")
+    print("Run the setup again or install manually from:")
+    print("https://github.com/andr-ew/cartographer")
+    return false
+  end
+end
+
+-- Load cartographer
+if not load_cartographer() then
+  print("Cannot continue without cartographer dependency")
+  return
+end
 
 -- Voice and sample management
 local voice_count = 6
