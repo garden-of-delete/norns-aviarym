@@ -50,6 +50,16 @@ end
 function init()
   Setup.init()
   
+  -- Initialize variables
+  volume = 1.0
+  position1 = 0
+  position2 = 0
+  is_playing = false
+  voice1_playing = false
+  voice2_playing = false
+  current_sample1 = 1  -- Start with first sample
+  current_sample2 = 1  -- Start with first sample
+  
   -- Debug print Setup table values
   print("Setup table values:")
   for key, value in pairs(Setup) do
@@ -70,123 +80,172 @@ function init()
     return
   end
   
-  -- Initialize Softcut parameters
-  softcut.buffer_clear()
-  
-  -- Load all samples sequentially into buffer 1
-  local current_position = 0
+  -- Store sample information (but don't load them yet)
+  sample_positions = {}
   for i, sample_file in ipairs(samples) do
-    print("Loading sample: " .. sample_file)
-    local ch, samples, samplerate = audio.file_info(sample_file)
-    local duration = samples / samplerate
+    local ch, samples_count, samplerate = audio.file_info(sample_file)
+    local duration = samples_count / samplerate
     
-    -- Store start and end positions for this sample
     sample_positions[i] = {
-      start = current_position,
-      end_pos = current_position + duration,
-      file = sample_file
+      file = sample_file,
+      duration = duration,
+      channels = ch,
+      sample_count = samples_count,
+      sample_rate = samplerate
     }
     
-    -- Read file into buffer 1 at current position
-    softcut.buffer_read_mono(sample_file, current_position, 1, -1, 1, 1)
-    current_position = current_position + duration
+    print(string.format("Sample %d: %s (%.2fs)", i, sample_file, duration))
   end
   
-  print("\n=== SAMPLE BUFFER INFORMATION ===")
-  print("Total samples loaded: " .. #sample_positions)
-  print("Total buffer duration: " .. string.format("%.2f", current_position) .. " seconds")
-  print("\nDetailed sample information:")
-  for i, sample in ipairs(sample_positions) do
-    print(string.format("\nSample %d:", i))
-    print("  File: " .. sample.file)
-    print("  Start position: " .. string.format("%.2f", sample.start) .. " seconds")
-    print("  End position: " .. string.format("%.2f", sample.end_pos) .. " seconds")
-    print("  Duration: " .. string.format("%.2f", sample.end_pos - sample.start) .. " seconds")
-  end
-  print("\n===============================")
+  -- Clear buffers
+  print("\nClearing buffers...")
+  softcut.buffer_clear()
+  print("Buffers cleared")
   
-  -- Set up voice 1
+  -- Set up voices (they'll load samples when first played)
+  print("\nSetting up voices...")
+  
+  -- Voice 1 setup
+  print("Setting up voice 1:")
   softcut.enable(1, 1)
   softcut.buffer(1, 1)
-  softcut.level(1, 1.0)
-  softcut.level_input_cut(1, 1, 1.0)
-  softcut.level_input_cut(2, 1, 1.0)
-  softcut.level_cut_cut(1, 1, 1.0)  -- Voice 1 to output (self-routing)
-  softcut.pan(1, -0.5)  -- Pan slightly left
+  softcut.level(1, volume)
   softcut.loop(1, 1)
-  current_sample1 = choose_random_sample_index()
-  local sample1_pos = sample_positions[current_sample1]
-  print("Voice 1 initial sample: " .. sample1_pos.file)
-  softcut.loop_start(1, sample1_pos.start)
-  softcut.loop_end(1, sample1_pos.end_pos)
-  softcut.position(1, sample1_pos.start)
+  softcut.loop_start(1, 0)
+  softcut.loop_end(1, 1)  -- Will be updated when sample loads
+  softcut.position(1, 0)
   softcut.rate(1, 1.0)
-  softcut.play(1, 0)
+  softcut.pan(1, -0.5)  -- Pan slightly left
+  softcut.play(1, 0)  -- Start stopped
   
-  -- Set up voice 2
+  -- Voice 2 setup  
+  print("Setting up voice 2:")
   softcut.enable(2, 1)
-  softcut.buffer(2, 1)
-  softcut.level(2, 1.0)
-  softcut.level_input_cut(1, 2, 1.0)
-  softcut.level_input_cut(2, 2, 1.0)
-  softcut.level_cut_cut(2, 2, 1.0)  -- Voice 2 to output (self-routing)
-  softcut.pan(2, 0.5)  -- Pan slightly right
+  softcut.buffer(2, 2)  -- Use buffer 2 for voice 2
+  softcut.level(2, volume)
   softcut.loop(2, 1)
-  current_sample2 = choose_random_sample_index()
-  local sample2_pos = sample_positions[current_sample2]
-  print("Voice 2 initial sample: " .. sample2_pos.file)
-  softcut.loop_start(2, sample2_pos.start)
-  softcut.loop_end(2, sample2_pos.end_pos)
-  softcut.position(2, sample2_pos.start)
+  softcut.loop_start(2, 0)
+  softcut.loop_end(2, 1)  -- Will be updated when sample loads
+  softcut.position(2, 0)
   softcut.rate(2, 1.0)
-  softcut.play(2, 0)
+  softcut.pan(2, 0.5)  -- Pan slightly right
+  softcut.play(2, 0)  -- Start stopped
   
-  -- Set up audio routing
+  -- Audio routing setup
+  print("\nSetting up audio routing:")
   audio.level_adc_cut(1.0)
   audio.level_eng_cut(1.0)
   audio.level_tape_cut(1.0)
+  print("Audio routing configured")
   
+  -- Initialize state variables
   position1 = 0
   position2 = 0
-  volume = 1.0
   is_playing = false
+  voice1_playing = false
+  voice2_playing = false
   current_samples = samples
+  voice1_loaded_sample = 0  -- Track which sample is loaded
+  voice2_loaded_sample = 0
+  
+  print("\nInitialization complete")
+  print("Press K2 to play voice 1, K3 to play voice 2")
   redraw()
+end
+
+-- Function to load a sample into a specific buffer
+function load_sample_to_buffer(sample_index, buffer_num, voice_num)
+  if sample_index < 1 or sample_index > #sample_positions then
+    print("Error: Invalid sample index")
+    return false
+  end
+  
+  local sample_info = sample_positions[sample_index]
+  print("Loading sample " .. sample_index .. " into buffer " .. buffer_num .. ": " .. sample_info.file)
+  
+  -- Clear the specific buffer
+  if buffer_num == 1 then
+    softcut.buffer_clear_region(1, 0, sample_info.duration + 1)
+  else
+    softcut.buffer_clear_region(2, 0, sample_info.duration + 1)
+  end
+  
+  -- Load the sample
+  softcut.buffer_read_mono(sample_info.file, 0, 0, -1, 1, buffer_num)
+  
+  -- Update voice parameters
+  softcut.loop_start(voice_num, 0)
+  softcut.loop_end(voice_num, sample_info.duration)
+  softcut.position(voice_num, 0)
+  
+  print("Sample loaded - duration: " .. string.format("%.2f", sample_info.duration) .. "s")
+  return true
 end
 
 function key(n,z)
   print("Key pressed: " .. n .. " state: " .. z)
+  
   if n == 2 and z == 1 then
-    print("K2 pressed - toggling both voices")
-    is_playing = not is_playing
+    print("K2 pressed - toggling voice 1")
     
-    if is_playing then
-      -- Choose new random samples for both voices
-      current_sample1 = choose_random_sample_index()
-      current_sample2 = choose_random_sample_index()
+    if not voice1_playing then
+      -- Cycle to next sample for voice 1
+      current_sample1 = current_sample1 + 1
+      if current_sample1 > #sample_positions then
+        current_sample1 = 1
+      end
       
-      local sample1_pos = sample_positions[current_sample1]
-      local sample2_pos = sample_positions[current_sample2]
-      
-      print("Voice 1 playing sample: " .. sample1_pos.file)
-      print("Voice 2 playing sample: " .. sample2_pos.file)
-      
-      -- Set up voice 1
-      softcut.loop_start(1, sample1_pos.start)
-      softcut.loop_end(1, sample1_pos.end_pos)
-      softcut.position(1, sample1_pos.start)
-      
-      -- Set up voice 2
-      softcut.loop_start(2, sample2_pos.start)
-      softcut.loop_end(2, sample2_pos.end_pos)
-      softcut.position(2, sample2_pos.start)
+      -- Load the sample if it's not already loaded
+      if voice1_loaded_sample ~= current_sample1 then
+        print("Loading new sample for voice 1...")
+        load_sample_to_buffer(current_sample1, 1, 1)
+        voice1_loaded_sample = current_sample1
+        -- Add a small delay to ensure loading completes
+        clock.run(function()
+          clock.sleep(0.1)
+          position1 = 0  -- Reset normalized position
+          redraw()
+        end)
+      end
     end
     
-    -- Toggle both voices
-    softcut.play(1, is_playing and 1 or 0)
-    softcut.play(2, is_playing and 1 or 0)
-    print("Play state: " .. (is_playing and "ON" or "OFF"))
+    -- Toggle play state
+    voice1_playing = not voice1_playing
+    softcut.play(1, voice1_playing and 1 or 0)
+    print("Voice 1 play state: " .. (voice1_playing and "ON" or "OFF"))
+    
+  elseif n == 3 and z == 1 then
+    print("K3 pressed - toggling voice 2")
+    
+    if not voice2_playing then
+      -- Cycle to next sample for voice 2
+      current_sample2 = current_sample2 + 1
+      if current_sample2 > #sample_positions then
+        current_sample2 = 1
+      end
+      
+      -- Load the sample if it's not already loaded
+      if voice2_loaded_sample ~= current_sample2 then
+        print("Loading new sample for voice 2...")
+        load_sample_to_buffer(current_sample2, 2, 2)
+        voice2_loaded_sample = current_sample2
+        -- Add a small delay to ensure loading completes
+        clock.run(function()
+          clock.sleep(0.1)
+          position2 = 0  -- Reset normalized position
+          redraw()
+        end)
+      end
+    end
+    
+    -- Toggle play state
+    voice2_playing = not voice2_playing
+    softcut.play(2, voice2_playing and 1 or 0)
+    print("Voice 2 play state: " .. (voice2_playing and "ON" or "OFF"))
   end
+  
+  -- Update global playing state
+  is_playing = voice1_playing or voice2_playing
   redraw()
 end
 
@@ -198,19 +257,23 @@ function enc(n,d)
     softcut.level(1, volume)
     softcut.level(2, volume)
   elseif n == 2 then
-    position1 = position1 + (d * 0.1)
-    if position1 < 0 then position1 = 0 end
-    if position1 > 1 then position1 = 1 end
-    local sample_pos = sample_positions[current_sample1]
-    local new_pos = sample_pos.start + (position1 * (sample_pos.end_pos - sample_pos.start))
-    softcut.position(1, new_pos)
+    if voice1_loaded_sample > 0 then
+      position1 = position1 + (d * 0.1)
+      if position1 < 0 then position1 = 0 end
+      if position1 > 1 then position1 = 1 end
+      local sample_info = sample_positions[current_sample1]
+      local new_pos = position1 * sample_info.duration
+      softcut.position(1, new_pos)
+    end
   elseif n == 3 then
-    position2 = position2 + (d * 0.1)
-    if position2 < 0 then position2 = 0 end
-    if position2 > 1 then position2 = 1 end
-    local sample_pos = sample_positions[current_sample2]
-    local new_pos = sample_pos.start + (position2 * (sample_pos.end_pos - sample_pos.start))
-    softcut.position(2, new_pos)
+    if voice2_loaded_sample > 0 then
+      position2 = position2 + (d * 0.1)
+      if position2 < 0 then position2 = 0 end
+      if position2 > 1 then position2 = 1 end
+      local sample_info = sample_positions[current_sample2]
+      local new_pos = position2 * sample_info.duration
+      softcut.position(2, new_pos)
+    end
   end
   redraw()
 end
@@ -220,16 +283,34 @@ function redraw()
   screen.move(10, 20)
   screen.text("VOICE 1:")
   screen.move(10, 30)
-  screen.text("POS: " .. string.format("%.2f", position1))
-  screen.move(10, 40)
+  if voice1_loaded_sample > 0 then
+    local sample_info = sample_positions[current_sample1]
+    local actual_pos1 = position1 * sample_info.duration
+    screen.text("POS: " .. string.format("%.2f", actual_pos1) .. "s")
+    screen.move(10, 35)
+    screen.text("Sample: " .. current_sample1)
+  else
+    screen.text("No sample loaded")
+  end
+  
+  screen.move(10, 45)
   screen.text("VOICE 2:")
-  screen.move(10, 50)
-  screen.text("POS: " .. string.format("%.2f", position2))
-  screen.move(10, 60)
-  screen.text("VOL: " .. string.format("%.2f", volume))
+  screen.move(10, 55)
+  if voice2_loaded_sample > 0 then
+    local sample_info = sample_positions[current_sample2]
+    local actual_pos2 = position2 * sample_info.duration
+    screen.text("POS: " .. string.format("%.2f", actual_pos2) .. "s")
+    screen.move(10, 60)
+    screen.text("Sample: " .. current_sample2)
+  else
+    screen.text("No sample loaded")
+  end
+  
   screen.move(10, 70)
-  screen.text("PLAY: " .. (is_playing and "ON" or "OFF"))
+  screen.text("VOL: " .. string.format("%.2f", volume))
   screen.move(10, 80)
-  screen.text("K2: toggle both voices")
+  screen.text("K2: toggle voice 1 (" .. (voice1_playing and "ON" or "OFF") .. ")")
+  screen.move(10, 90)
+  screen.text("K3: toggle voice 2 (" .. (voice2_playing and "ON" or "OFF") .. ")")
   screen.update()
 end
