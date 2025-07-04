@@ -44,7 +44,7 @@ function VoiceManager.init(sample_files, sample_slices, cartographer_instance, c
     softcut.level(i, volume)
     softcut.loop(i, 1)
     softcut.rate(i, 1.0)
-    softcut.pan(i, util.linlin(1, voice_count, -1, 1, i))  -- Spread across stereo field
+    softcut.pan(i, util.linlin(1, voice_count, -config.STEREO_PAN_RANGE, config.STEREO_PAN_RANGE, i))  -- Spread across stereo field
     softcut.play(i, 0)  -- Start stopped
   end
 end

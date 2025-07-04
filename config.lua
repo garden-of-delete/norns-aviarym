@@ -19,6 +19,7 @@ local Config = {
   
   -- Audio settings
   DEFAULT_PAN_SPREAD = true,  -- Spread voices across stereo field
+  STEREO_PAN_RANGE = 0.8,     -- Stereo field range (-0.8 to +0.8 instead of -1 to +1)
   
   -- Buffer management
   MAX_SLICES_PER_BUFFER = 3,
