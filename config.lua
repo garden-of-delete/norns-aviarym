@@ -3,7 +3,7 @@
 
 local Config = {
   -- Voice settings
-  VOICE_COUNT = 6,
+  VOICE_COUNT = 6,  -- six voice hardware limit due to softcut
   DEFAULT_VOLUME = 1.0,
   
   -- File paths
