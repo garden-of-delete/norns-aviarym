@@ -7,11 +7,11 @@ local Config = {
   DEFAULT_VOLUME = 1.0,
   
   -- File paths
-  METADATA_FILE = "/home/we/dUST/data/aviarym/samples.json",
-  SAMPLES_DIR = "/home/we/dUST/audio/aviarym/samples",
+  METADATA_FILE = "/home/we/dust/data/aviarym/samples_metadata.json",
+  SAMPLES_DIR = "/home/we/dust/audio/aviarym/samples",
   
   -- Cartographer settings
-  CARTOGRAPHER_PATH = "/home/we/dUST/code/lib/cartographer/cartographer",
+  CARTOGRAPHER_PATH = "/home/we/dust/code/lib/cartographer/cartographer",
   
   -- UI settings
   MAX_SAMPLE_NAME_LENGTH = 12,

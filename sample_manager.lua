@@ -7,9 +7,9 @@ local SampleManager = {}
 local sample_slices = {}
 local sample_files = {}
 
--- Function to read metadata file
+-- Function to read comprehensive metadata file
 local function read_metadata()
-  local file = io.open("/home/we/dust/data/aviarym/samples.json", "r")
+  local file = io.open("/home/we/dust/data/aviarym/samples_metadata.json", "r")
   if not file then
     print("Error: Could not open metadata file")
     return nil
@@ -20,23 +20,75 @@ local function read_metadata()
   
   -- Simple JSON parsing for our specific format
   local samples = {}
-  for line in content:gmatch('"([^"]+)"') do
-    if line:match("%.wav$") then  -- Only include WAV files
-      table.insert(samples, line)
+  local metadata = {}
+  
+  -- Parse the JSON structure
+  -- Look for the samples array
+  local samples_section = content:match('"samples":%s*%[(.-)%]')
+  if not samples_section then
+    print("Error: Could not find samples array in metadata file")
+    return nil
+  end
+  
+  -- Parse each sample object
+  local sample_objects = {}
+  for sample_obj in samples_section:gmatch('{(.-)}') do
+    local sample_data = {}
+    
+    -- Extract filename
+    local filename = sample_obj:match('"filename":%s*"([^"]+)"')
+    if filename then
+      sample_data.filename = filename
+    end
+    
+    -- Extract bird name
+    local bird_name = sample_obj:match('"bird_name":%s*"([^"]*)"')
+    if bird_name then
+      sample_data.bird_name = bird_name
+    end
+    
+    -- Extract sound type
+    local sound_type = sample_obj:match('"sound_type":%s*"([^"]*)"')
+    if sound_type then
+      sample_data.sound_type = sound_type
+    end
+    
+    -- Extract location
+    local location = sample_obj:match('"location":%s*"([^"]*)"')
+    if location then
+      sample_data.location = location
+    end
+    
+    -- Extract subspecies
+    local subspecies = sample_obj:match('"subspecies":%s*"([^"]*)"')
+    if subspecies then
+      sample_data.subspecies = subspecies
+    end
+    
+    -- Extract parsed status
+    local parsed = sample_obj:match('"parsed":%s*(%w+)')
+    if parsed then
+      sample_data.parsed = (parsed == "true")
+    end
+    
+    if sample_data.filename and sample_data.filename:match("%.wav$") then
+      table.insert(samples, sample_data.filename)
+      table.insert(sample_objects, sample_data)
     end
   end
   
   if #samples == 0 then
-    print("No samples found in metadata file")
+    print("No WAV samples found in metadata file")
     return nil
   end
   
-  return samples
+  print("Loaded metadata for " .. #samples .. " samples")
+  return samples, sample_objects
 end
 
 function SampleManager.init(cartographer_instance, config)
   -- Read metadata and get available samples
-  local samples = read_metadata()
+  local samples, sample_metadata = read_metadata()
   if not samples then
     print("No samples available")
     return false
@@ -44,6 +96,37 @@ function SampleManager.init(cartographer_instance, config)
   
   sample_files = samples
   print("Found " .. #sample_files .. " samples")
+  
+  -- Store metadata for later use
+  SampleManager.metadata = sample_metadata or {}
+  
+  -- Print some sample information
+  if sample_metadata then
+    local parsed_count = 0
+    local unique_birds = {}
+    local unique_locations = {}
+    
+    for _, meta in ipairs(sample_metadata) do
+      if meta.parsed then
+        parsed_count = parsed_count + 1
+      end
+      if meta.bird_name and meta.bird_name ~= "" then
+        unique_birds[meta.bird_name] = true
+      end
+      if meta.location and meta.location ~= "" then
+        unique_locations[meta.location] = true
+      end
+    end
+    
+    local bird_count = 0
+    for _ in pairs(unique_birds) do bird_count = bird_count + 1 end
+    local location_count = 0
+    for _ in pairs(unique_locations) do location_count = location_count + 1 end
+    
+    print("  " .. parsed_count .. " parsed successfully")
+    print("  " .. bird_count .. " unique bird species")
+    print("  " .. location_count .. " unique locations")
+  end
   
   -- Clear buffers
   print("\nClearing buffers...")
@@ -87,5 +170,6 @@ end
 -- Getters
 function SampleManager.get_sample_slices() return sample_slices end
 function SampleManager.get_sample_files() return sample_files end
+function SampleManager.get_sample_metadata() return SampleManager.metadata or {} end
 
 return SampleManager 
