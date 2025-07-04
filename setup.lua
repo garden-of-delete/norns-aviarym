@@ -98,24 +98,150 @@ local function setup_directories()
   return success
 end
 
--- Function to create sample metadata file
+-- Function to parse bird sound filename and extract metadata
+local function parse_bird_filename(filename)
+  -- Remove file extension and path
+  local base_name = filename:match("([^/]+)%.%w+$") or filename
+  
+  -- Initialize metadata structure
+  local metadata = {
+    bird_name = "",
+    sound_type = "",
+    location = "",
+    subspecies = "",
+    filename = filename,
+    parsed = false
+  }
+  
+  -- Step 1: Check if filename ends with location code pattern
+  local location_pattern = "([A-Z][A-Z]%-[A-Z0-9]+)$"
+  local location = base_name:match(" " .. location_pattern)
+  
+  local name_without_location = base_name
+  if location then
+    -- Remove location from the end to get the main part
+    name_without_location = base_name:gsub(" " .. location_pattern, "")
+  end
+  
+  -- Step 2: Parse the main part for "Bird Name ## Sound Type" pattern
+  local bird_name, number, sound_type = name_without_location:match("^(.+) (%d+) (.+)$")
+  
+  if bird_name and number and sound_type then
+    -- Check if sound type contains subspecies in parentheses
+    local main_sound, subspecies = sound_type:match("^(.+) %(([^%)]+)%)$")
+    
+    if main_sound and subspecies then
+      metadata.sound_type = main_sound
+      metadata.subspecies = subspecies
+    else
+      metadata.sound_type = sound_type
+    end
+    
+    metadata.bird_name = bird_name
+    metadata.location = location or ""
+    metadata.parsed = true
+    return metadata
+  end
+  
+  -- Step 3: Fallback parsing for unusual formats
+  local parts = {}
+  for word in base_name:gmatch("%S+") do
+    table.insert(parts, word)
+  end
+  
+  if #parts >= 3 then
+    -- Check if last part is location
+    local last_part = parts[#parts]
+    if last_part:match("^[A-Z][A-Z]%-[A-Z0-9]+$") then
+      metadata.location = last_part
+      table.remove(parts, #parts)
+    end
+    
+    -- Find number to separate bird name from sound type
+    local number_index = nil
+    for i, part in ipairs(parts) do
+      if part:match("^%d+$") then
+        number_index = i
+        break
+      end
+    end
+    
+    if number_index and number_index > 1 and number_index < #parts then
+      -- Bird name is everything before the number
+      local bird_parts = {}
+      for i = 1, number_index - 1 do
+        table.insert(bird_parts, parts[i])
+      end
+      metadata.bird_name = table.concat(bird_parts, " ")
+      
+      -- Sound type is everything after the number
+      local sound_parts = {}
+      for i = number_index + 1, #parts do
+        table.insert(sound_parts, parts[i])
+      end
+      metadata.sound_type = table.concat(sound_parts, " ")
+      metadata.parsed = true
+    else
+      -- Complete fallback
+      metadata.bird_name = base_name
+      metadata.sound_type = "Unknown"
+      metadata.location = ""
+      metadata.parsed = false
+    end
+  else
+    -- Too few parts, treat as unparsed
+    metadata.bird_name = base_name
+    metadata.sound_type = "Unknown"
+    metadata.location = ""
+    metadata.parsed = false
+  end
+  
+  return metadata
+end
+
+-- Function to create comprehensive sample metadata file
 local function setup_metadata()
   local data_dir = "/home/we/dust/data/aviarym"
   local samples_dir = "/home/we/dust/audio/aviarym/samples"
-  local metadata_file = data_dir .. "/samples.json"
+  local metadata_file = data_dir .. "/samples_metadata.json"
   
   -- Get list of WAV files
-  local handle = io.popen("find " .. samples_dir .. " -name '*.wav'")
+  local handle = io.popen("find " .. samples_dir .. " -name '*.wav' -o -name '*.mp3'")
   if not handle then
     print("Error: Could not access samples directory")
     return false
   end
   
-  local samples = {}
+  local sample_files = {}
   for file in handle:lines() do
-    table.insert(samples, file)
+    table.insert(sample_files, file)
   end
   handle:close()
+  
+  if #sample_files == 0 then
+    print("No audio files found in samples directory")
+    return false
+  end
+  
+  -- Parse metadata for each file
+  print("Parsing metadata for " .. #sample_files .. " files...")
+  local samples_metadata = {}
+  local parsed_count = 0
+  
+  for i, file_path in ipairs(sample_files) do
+    local metadata = parse_bird_filename(file_path)
+    samples_metadata[i] = metadata
+    
+    if metadata.parsed then
+      parsed_count = parsed_count + 1
+    end
+    
+    -- Print progress for every 10th file or if parsing failed
+    if i % 10 == 0 or not metadata.parsed then
+      print("  " .. i .. "/" .. #sample_files .. ": " .. 
+            (metadata.parsed and "✓" or "✗") .. " " .. metadata.bird_name)
+    end
+  end
   
   -- Create metadata file
   local file = io.open(metadata_file, "w")
@@ -124,19 +250,35 @@ local function setup_metadata()
     return false
   end
   
-  -- Write sample paths as JSON array
-  file:write("{\n  \"samples\": [\n")
-  for i, sample in ipairs(samples) do
-    file:write("    \"" .. sample .. "\"")
-    if i < #samples then
+  -- Write comprehensive metadata as JSON
+  file:write("{\n")
+  file:write("  \"generated_at\": \"" .. os.date("%Y-%m-%d %H:%M:%S") .. "\",\n")
+  file:write("  \"total_files\": " .. #sample_files .. ",\n")
+  file:write("  \"parsed_files\": " .. parsed_count .. ",\n")
+  file:write("  \"samples\": [\n")
+  
+  for i, metadata in ipairs(samples_metadata) do
+    file:write("    {\n")
+    file:write("      \"filename\": \"" .. metadata.filename .. "\",\n")
+    file:write("      \"bird_name\": \"" .. metadata.bird_name .. "\",\n")
+    file:write("      \"sound_type\": \"" .. metadata.sound_type .. "\",\n")
+    file:write("      \"location\": \"" .. metadata.location .. "\",\n")
+    file:write("      \"subspecies\": \"" .. metadata.subspecies .. "\",\n")
+    file:write("      \"parsed\": " .. (metadata.parsed and "true" or "false") .. "\n")
+    file:write("    }")
+    if i < #samples_metadata then
       file:write(",")
     end
     file:write("\n")
   end
-  file:write("  ]\n}")
+  
+  file:write("  ]\n")
+  file:write("}")
   file:close()
   
-  print("Metadata file created successfully")
+  print("Metadata file created successfully: " .. metadata_file)
+  print("Successfully parsed " .. parsed_count .. "/" .. #sample_files .. " files")
+  
   return true
 end
 
